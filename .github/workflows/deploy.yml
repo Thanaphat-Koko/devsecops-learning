@@ -1,0 +1,29 @@
+name: Deploy to Self-Hosted Runner
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t node-app-deploy .
+
+      - name: Stop and remove existing container
+        run: |
+          docker stop node-app-container || true
+          docker rm node-app-container || true
+
+      - name: Run new container
+        run: |
+          docker run -d \
+            -p 3000:3000 \
+            --name node-app-container \
+            node-app-deploy
