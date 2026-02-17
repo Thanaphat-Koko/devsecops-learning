@@ -1,29 +1,61 @@
-name: Deploy to Self-Hosted Runner
+name: Build and Deploy to GKE
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: my-gke-cluster
+  GKE_ZONE: us-central1
+  REPOSITORY: my-app-repo
+  IMAGE: node-hello-world
 
 jobs:
-  deploy:
-    runs-on: self-hosted
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Build Docker image
-        run: docker build -t node-remote-test . 
-
-      - name: Stop and remove existing container
         run: |
-          docker stop node-remote-test || true
-          docker rm node-remote-test || true
+          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA .
+          docker tag us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA \
+            us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
 
-      - name: Run new container
+      - name: Push Docker image
         run: |
-          docker run -d \
-            -p 3000:3000 \
-            --name node-remote-test \
-            node-remote-test
+          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA
+          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+
+      - name: Deploy to GKE
+        run: |
+          kubectl set image deployment/node-hello-world \
+            node-hello-world=us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA
+          kubectl rollout status deployment/node-hello-world --timeout=300s
