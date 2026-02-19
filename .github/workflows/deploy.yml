@@ -3,8 +3,7 @@ name: Deploy to Self-Hosted Runner
 on:
   push:
     branches:
-      - main
-      - master
+      - Lab1
 
 jobs:
   deploy:
