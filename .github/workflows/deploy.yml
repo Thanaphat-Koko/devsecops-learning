@@ -18,24 +18,17 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  # build-and-push:
-  #   runs-on: ubuntu-latest
+  build-and-push:
+    runs-on: ubuntu-latest
 
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v3
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Code Scan with SonarQube
-  #       uses: SonarSource/sonarqube-scan-action@master
-  #       # continue-on-error: true  # exit code 3 = Quality Gate failed (non-blocking)
-  #       env:
-  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  #         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest .
 
-      # - name: Build Docker Image
-      #   run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest .
-
-      # - name: Push Docker Image to Docker Hub Registry
-      #   run: |
-      #     echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-      #     docker push ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
+      - name: Push Docker Image to Docker Hub Registry
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
