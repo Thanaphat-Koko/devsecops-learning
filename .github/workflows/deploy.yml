@@ -1,61 +1,41 @@
-name: Build and Deploy to GKE
+name: Scan Code with SonarQube and build & push Docker Image
 
 on:
   push:
-    branches: [main, master]
-
-env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GKE_CLUSTER: my-gke-cluster
-  GKE_ZONE: us-central1
-  REPOSITORY: my-app-repo
-  IMAGE: node-hello-world
+    branches:
+      - main
 
 jobs:
-  build-and-deploy:
+  sonarqube:
+    name: SonarQube
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - uses: actions/checkout@v4
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+  # build-and-push:
+  #   runs-on: ubuntu-latest
 
-      - name: Install GKE auth plugin
-        run: gcloud components install gke-gcloud-auth-plugin --quiet
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+  #     - name: Code Scan with SonarQube
+  #       uses: SonarSource/sonarqube-scan-action@master
+  #       # continue-on-error: true  # exit code 3 = Quality Gate failed (non-blocking)
+  #       env:
+  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  #         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      - name: Build Docker image
-        run: |
-          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA .
-          docker tag us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA \
-            us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
+      # - name: Build Docker Image
+      #   run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest .
 
-      - name: Push Docker image
-        run: |
-          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA
-          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
-
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ env.GKE_CLUSTER }}
-          location: ${{ env.GKE_ZONE }}
-
-      - name: Deploy to GKE
-        run: |
-          kubectl set image deployment/node-hello-world \
-            node-hello-world=us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:$GITHUB_SHA
-          kubectl rollout status deployment/node-hello-world --timeout=300s
+      # - name: Push Docker Image to Docker Hub Registry
+      #   run: |
+      #     echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      #     docker push ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
