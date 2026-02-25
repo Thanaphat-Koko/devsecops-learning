@@ -1,29 +1,28 @@
-name: Deploy to Self-Hosted Runner
+name: Scan Code with SonarQube and build & push Docker Image
 
 on:
   push:
     branches:
-      - main
-      - Lab1
+      - Lab2
 
 jobs:
-  deploy:
-    runs-on: self-hosted
+  build-and-push:
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Build Docker image
-        run: docker build -t node-remote-test . 
+      - name: Code Scan with SonarQube
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      - name: Stop and remove existing container
-        run: |
-          docker stop node-remote-test || true
-          docker rm node-remote-test || true
+      # - name: Build Docker Image
+      #   run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest .
 
-      - name: Run new container
-        run: |
-          docker run -d \
-            -p 3000:3000 \
-            --name node-remote-test \
-            node-remote-test
+      # - name: Push Docker Image to Docker Hub Registry
+      #   run: |
+      #     echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      #     docker push ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
