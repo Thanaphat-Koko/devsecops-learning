@@ -32,3 +32,24 @@ jobs:
         run: |
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
+
+  deploy:
+    runs-on: self-hosted
+    needs: build-and-push
+    steps:
+      - name: Pull Docker Image from Docker Hub
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
+
+      - name: Stop and remove existing container
+        run: |
+          docker stop node-remote-test || true
+          docker rm node-remote-test || true
+
+      - name: Run new container
+        run: |
+          docker run -d \
+            -p 3000:3000 \
+            --name node-remote-test \
+            ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
