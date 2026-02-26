@@ -1,4 +1,4 @@
-name: Scan Code with SonarQube and build & push Docker Image
+name: Scan, Build, Push & Deploy to Minikube
 
 on:
   push:
@@ -37,19 +37,46 @@ jobs:
     runs-on: self-hosted
     needs: build-and-push
     steps:
-      - name: Pull Docker Image from Docker Hub
-        run: |
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Stop and remove existing container
+      - name: Check Minikube status
         run: |
-          docker stop node-remote-test || true
-          docker rm node-remote-test || true
+          echo "=== Minikube Status ==="
+          minikube status || true
 
-      - name: Run new container
+          # If Minikube is not running, start it
+          if ! minikube status | grep -q "Running"; then
+            echo "Minikube is not running. Starting Minikube..."
+            minikube start
+          else
+            echo "Minikube is running. Proceeding with deployment."
+          fi
+
+      - name: Create Docker Hub pull secret in Kubernetes
         run: |
-          docker run -d \
-            -p 3000:3000 \
-            --name node-remote-test \
-            ${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
+          # Allows Minikube to pull private images from Docker Hub.
+          kubectl create secret docker-registry dockerhub-secret \
+            --docker-server=https://index.docker.io/v1/ \
+            --docker-username=${{ secrets.DOCKERHUB_USERNAME }} \
+            --docker-password=${{ secrets.DOCKERHUB_TOKEN }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy latest image from Docker Hub to Minikube
+        run: |
+          # Patch the live deployment to use the new Docker Hub image.
+          # Kubernetes will pull it directly from Docker Hub.
+          kubectl set image deployment/nodejs-deployment \
+            nodejs-app=${{ secrets.DOCKERHUB_USERNAME }}/node-remote-test:latest
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/
+
+      - name: Wait for rollout to complete
+        run: |
+          kubectl rollout status deployment/nodejs-deployment --timeout=120s
+
+      - name: Show service URL
+        run: |
+          minikube service nodejs-service --url
