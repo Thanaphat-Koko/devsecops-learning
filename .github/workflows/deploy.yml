@@ -53,10 +53,17 @@ jobs:
             echo "Minikube is running. Proceeding with deployment."
           fi
           
-      - name: Alias kubectl
+      - name: Set up kubectl via Minikube
         run: |
-          alias kubectl="minikube kubectl --"
-          
+          # 'alias' only lives for the current shell, so we create a real
+          # executable wrapper instead — this persists for all subsequent steps.
+          sudo tee /usr/local/bin/kubectl > /dev/null <<'EOF'
+          #!/bin/bash
+          exec minikube kubectl -- "$@"
+          EOF
+          sudo chmod +x /usr/local/bin/kubectl
+          kubectl version --client   # Verify it works
+
       - name: Create Docker Hub pull secret in Kubernetes
         run: |
           # Allows Minikube to pull private images from Docker Hub.
